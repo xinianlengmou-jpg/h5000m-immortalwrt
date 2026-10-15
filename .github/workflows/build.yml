@@ -1,6 +1,7 @@
 name: Build H5000M
 
 on:
+  # 手动触发（GitHub 界面 Run workflow）
   workflow_dispatch:
     inputs:
       branch:
@@ -18,6 +19,11 @@ on:
         required: true
         type: boolean
 
+  # 推送到 build 分支也能触发，方便用 git 直接开跑，不必进网页点按钮。
+  # 用法：git push -f origin main:build
+  push:
+    branches: [build]
+
 permissions:
   contents: write
 
@@ -31,7 +37,7 @@ env:
 
 jobs:
   build:
-    name: H5000M (${{ inputs.branch }})
+    name: H5000M (${{ inputs.branch || 'master' }})
     runs-on: ubuntu-latest
     # 平台硬上限 6h，留一点余量，否则会被直接杀掉、缓存来不及保存
     timeout-minutes: 345
@@ -58,13 +64,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: wrt/.ccache
-          key: ccache-${{ env.DEVICE }}-${{ inputs.branch }}-${{ github.run_id }}
+          key: ccache-${{ env.DEVICE }}-${{ inputs.branch || 'master' }}-${{ github.run_id }}
           restore-keys: |
-            ccache-${{ env.DEVICE }}-${{ inputs.branch }}-
+            ccache-${{ env.DEVICE }}-${{ inputs.branch || 'master' }}-
 
       - name: 拉取底层源码
         run: |
-          git clone --depth=1 --single-branch --branch "${{ inputs.branch }}" "$SOURCE" wrt
+          git clone --depth=1 --single-branch --branch "${{ inputs.branch || 'master' }}" "$SOURCE" wrt
           cd wrt && git log -1 --oneline
 
       - name: 更新官方 feeds
@@ -124,10 +130,10 @@ jobs:
         if: ${{ inputs.test != true }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: H5000M-${{ inputs.branch }}-${{ github.run_number }}
-          name: H5000M ${{ inputs.branch }} #${{ github.run_number }}
+          tag_name: H5000M-${{ inputs.branch || 'master' }}-${{ github.run_number }}
+          name: H5000M ${{ inputs.branch || 'master' }} #${{ github.run_number }}
           files: out/*
           body: |
-            底层源码：${{ env.SOURCE }}（分支 `${{ inputs.branch }}`）
+            底层源码：${{ env.SOURCE }}（分支 `${{ inputs.branch || 'master' }}`）
             设备：`${{ env.DEVICE }}`（mediatek/filogic）
             提交：${{ github.sha }}
