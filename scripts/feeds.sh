@@ -10,12 +10,17 @@ FEED_SRC="$WORKSPACE/_feeds"
 
 mkdir -p "$FEED_SRC"
 
-# ---- QModem 后端 ----
-# 仓库结构是 application/* 与 luci/*，直接 src-git 会扫不到包，
+# ---- QModem 后端（拨号器）----
+# 用 LianXia233/QModem（她从上游 FUjr/QModem fork 的版本，QMODEM_VERSION 1.2.0）。
+# 上游 FUjr 是 3.4.0-rc3；选她的原因：更新更勤，且后端原生支持读
+# extra_modem_support.json（上游 FUjr 不读），RG520N-CN 多一层保障。
+# 依赖写的是不带版本号的库名（+libubus +libubox +libblobmsg-json +libuci），
+# 源码编译不受旧 ABI 影响。
+# 仓库结构是 application/* 与 luci/*，直接 src-git 扫不到包，
 # 所以 clone 到本地再用 src-link 注册为本地 feed。
 if [ ! -d "$FEED_SRC/qmodem" ]; then
   git clone --depth=1 --single-branch --branch main \
-    https://github.com/FUjr/QModem.git "$FEED_SRC/qmodem"
+    https://github.com/LianXia233/QModem.git "$FEED_SRC/qmodem"
 fi
 
 # ---- 通用模组管理界面 ----
@@ -29,7 +34,9 @@ fi
 # ---- apk 版本号合法性修正（否则整个固件构建会被阻断）----
 # OpenWrt 新版 apk 打包器不接受 `X.Y.Z-rc.N`：版本串被拼成 `3.4.0-rc.3-rN` 后
 # apk mkpkg 报 "package version is invalid" (Error 99)，构建全灭。
-# 改写成 apk 合法的 `X.Y.Z_rcN`；只影响包版本元数据。上游修好后自动跳过。
+# 改写成 apk 合法的 `X.Y.Z_rcN`；只影响包版本元数据。
+# 当前用的 LianXia233 版是 `1.2.0`，本身合法、会自动跳过；
+# 万一以后切回上游 FUjr（3.4.0-rc.3）或有 -rc.N 回退，这道保护就生效。
 VER_FILE="$FEED_SRC/qmodem/version.mk"
 if [ -f "$VER_FILE" ]; then
   if grep -qE '^QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' "$VER_FILE"; then

@@ -55,5 +55,6 @@ scripts/feeds.sh             # 挂载 QModem 后端与通用模组管理界面
 编译脚本与配置自写。上游与第三方：
 
 - 底层：[immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt)
-- 模组后端：[FUjr/QModem](https://github.com/FUjr/QModem)
+- 模组后端（拨号器）：[LianXia233/QModem](https://github.com/LianXia233/QModem)（`QMODEM_VERSION 1.2.0`）
+  —— 上游是 [FUjr/QModem](https://github.com/FUjr/QModem)（`3.4.0-rc3`），本仓库用的是她的 fork
 - 模组界面：[LianXia233/luci-app-qmodem-generic](https://github.com/LianXia233/luci-app-qmodem-generic)（Apache-2.0）
