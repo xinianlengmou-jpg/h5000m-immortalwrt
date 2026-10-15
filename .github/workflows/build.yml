@@ -93,7 +93,13 @@ jobs:
             echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y"
             echo "CONFIG_TARGET_MULTI_PROFILE=n"
             echo "CONFIG_TARGET_ALL_PROFILES=n"
+            # 设备符号有两种形态，缺一不可：
+            #   CONFIG_TARGET_<t>_<st>_DEVICE_<dev>   <- 真正决定编哪台机器
+            #   CONFIG_TARGET_DEVICE_<t>_<st>_DEVICE_<dev> <- per-device rootfs 的 menuconfig
+            # 只写后者的话 defconfig 会回落成默认 profile（实测落到了 openwrt_one）。
+            echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}_DEVICE_${DEVICE}=y"
             echo "CONFIG_TARGET_DEVICE_${TARGET}_${SUBTARGET}_DEVICE_${DEVICE}=y"
+            echo "CONFIG_TARGET_PROFILE=\"DEVICE_${DEVICE}\""
             cat "$GITHUB_WORKSPACE/config/base.seed"
             cat "$GITHUB_WORKSPACE/config/packages.txt"
             if [ -n "$EXTRA_PACKAGES" ]; then printf '%s\n' "$EXTRA_PACKAGES"; fi
