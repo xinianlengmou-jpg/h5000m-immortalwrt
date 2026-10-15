@@ -19,10 +19,11 @@ on:
         required: true
         type: boolean
 
-  # 推送到 build 分支也能触发，方便用 git 直接开跑，不必进网页点按钮。
-  # 用法：git push -f origin main:build
+  # 推送触发，方便用 git 直接开跑，不必进网页点按钮：
+  #   git push -f origin main:test    -> 只导出 .config，几分钟，用来验配置
+  #   git push -f origin main:build   -> 正式编译
   push:
-    branches: [build]
+    branches: [build, test]
 
 permissions:
   contents: write
@@ -104,22 +105,22 @@ jobs:
           path: wrt/.config
 
       - name: 下载源码包
-        if: ${{ inputs.test != true }}
+        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
         run: cd wrt && make download -j8
 
       - name: 编译固件
-        if: ${{ inputs.test != true }}
+        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
         run: cd wrt && make -j$(nproc) world
 
       - name: 收集产物
-        if: ${{ inputs.test != true }}
+        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
         run: |
           mkdir -p out
           find wrt/bin/targets -maxdepth 2 -type f \( -name '*.bin' -o -name '*.itb' -o -name '*.manifest' \) -exec cp {} out/ \;
           ls -lh out
 
       - name: 上传固件
-        if: ${{ inputs.test != true }}
+        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
         uses: actions/upload-artifact@v4
         with:
           name: firmware-h5000m
@@ -127,7 +128,7 @@ jobs:
           if-no-files-found: error
 
       - name: 发布 Release
-        if: ${{ inputs.test != true }}
+        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: H5000M-${{ inputs.branch || 'master' }}-${{ github.run_number }}
