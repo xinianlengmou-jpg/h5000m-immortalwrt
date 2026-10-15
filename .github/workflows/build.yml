@@ -83,6 +83,22 @@ jobs:
       - name: 挂载 QModem feeds
         run: bash "$GITHUB_WORKSPACE/scripts/feeds.sh" "$GITHUB_WORKSPACE/wrt"
 
+      - name: 注入出厂默认文件
+        # repo 的 files/ 目录按 rootfs 结构摆放，会被打进固件。
+        # 两个落点都放，覆盖 buildroot 的两种定制文件机制：
+        #   wrt/files/                        <- 官方文档的 custom files 目录
+        #   wrt/package/base-files/files/     <- base-files 打 rootfs 时整目录拷进去（最稳）
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          if [ -d files ]; then
+            mkdir -p wrt/files wrt/package/base-files/files
+            cp -a files/. wrt/files/
+            cp -a files/. wrt/package/base-files/files/
+            find wrt/package/base-files/files/etc/uci-defaults -type f | sed 's/^/  注入: /'
+          else
+            echo "  files/ 不存在，跳过"
+          fi
+
       - name: 生成 .config
         env:
           EXTRA_PACKAGES: ${{ inputs.packages }}
@@ -156,7 +172,11 @@ jobs:
               ls -1 "package/feeds/$f" 2>/dev/null | sed 's/^/    /' || echo "    ** 该 feed 没有任何包被 install **"
             done
             echo
-            echo "##### 6. filogic 下所有可选 profile #####"
+            echo "##### 6. 注入的出厂默认文件 #####"
+            ls -l "$GITHUB_WORKSPACE"/wrt/package/base-files/files/etc/uci-defaults/ 2>/dev/null \
+              || echo "  ** 没找到 uci-defaults，files/ 没注入成功 **"
+            echo
+            echo "##### 7. filogic 下所有可选 profile #####"
             grep -oE "TARGET_DEVICE_mediatek_filogic_DEVICE_[a-zA-Z0-9_-]+" tmp/.config-target.in 2>/dev/null \
               | sort -u | head -40
           } > "$GITHUB_WORKSPACE/diag.txt" 2>&1 || true

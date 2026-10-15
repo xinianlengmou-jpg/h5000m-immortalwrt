@@ -1,0 +1,25 @@
+#!/bin/sh
+# H5000M 出厂默认值
+#   LAN 地址：192.168.10.1/24
+#   root 密码：admin
+#
+# 放在 /etc/uci-defaults/ 下：首次启动时由 boot 脚本执行一次，
+# 执行完该文件会被自动删除，不会重复生效。
+# （sysupgrade 保留配置升级时不会重跑，所以不会覆盖你自己改过的设置。）
+
+# ---- LAN 地址 ----
+uci -q batch <<'UCI'
+set network.lan.ipaddr='192.168.10.1'
+set network.lan.netmask='255.255.255.0'
+set network.lan.ip6assign='60'
+commit network
+UCI
+
+# ---- root 密码：admin ----
+# $1$ = MD5 crypt（musl / busybox 一定支持），盐 h5000m，明文 admin。
+# 直接改 /etc/shadow 比 echo | passwd 可靠，不受 busybox passwd 交互行为影响。
+if [ -f /etc/shadow ]; then
+	sed -i 's|^root:[^:]*:|root:$1$h5000m$sfFBnwnCrwnZXtc8J1H0y1:|' /etc/shadow
+fi
+
+exit 0
