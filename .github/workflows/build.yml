@@ -118,6 +118,22 @@ jobs:
           name: config
           path: wrt/.config
 
+      # 匿名读不到 Actions 日志与 artifacts，所以把 .config 回传到
+      # config-out 分支（不在 push 触发列表里，不会自触发），方便外部直接 fetch 查看。
+      - name: 回传 .config 到 config-out 分支
+        if: ${{ github.ref == 'refs/heads/test' }}
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B config-out origin/main
+          mkdir -p ci-out
+          cp wrt/.config "ci-out/h5000m.${{ github.run_number }}.config"
+          git add ci-out
+          git commit -m "ci: 输出 .config 自检结果 (run ${{ github.run_number }})"
+          git push -f origin config-out
+
       - name: 下载源码包
         if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
         run: cd wrt && make download -j8
