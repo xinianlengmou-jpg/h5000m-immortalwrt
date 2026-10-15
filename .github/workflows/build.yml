@@ -149,7 +149,7 @@ jobs:
           git fetch origin main
           git checkout -B config-out origin/main
           mkdir -p ci-out
-          cp wrt/.config "ci-out/h5000m.${{ github.run_number }}.config"
+          cp "$GITHUB_WORKSPACE/wrt/.config" "ci-out/h5000m.${{ github.run_number }}.config"
           cp "$GITHUB_WORKSPACE/diag.txt" "ci-out/diag.${{ github.run_number }}.txt"
           git add ci-out
           git commit -m "ci: 输出 .config 与诊断 (run ${{ github.run_number }})"
