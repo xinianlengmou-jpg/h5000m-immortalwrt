@@ -1,3 +1,5 @@
+自用的
+
 # h5000m-immortalwrt
 
 只做一件事：给 **Hiveton H5000M** 编译 ImmortalWrt 固件。
