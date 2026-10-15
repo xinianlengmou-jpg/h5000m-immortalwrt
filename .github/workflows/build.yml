@@ -112,9 +112,9 @@ jobs:
           cd wrt
           echo "===== defconfig 之后仍然生效的符号 ====="
           grep -E '^CONFIG_TARGET_DEVICE_|^CONFIG_TARGET_mediatek' .config || echo "!! 设备 profile 丢失"
-          grep -E '^CONFIG_PACKAGE_(qmodem|quectel-CM-5G-M|input-support|luci-app-qmodem-generic)=' .config || echo "!! 模组相关包丢失"
+          grep -E '^CONFIG_PACKAGE_(qmodem|quectel-CM-5G-M|input-support|luci-app-qmodem-generic|luci-theme-mint|luci-app-h5000m-fancontrol|kmod-hwmon-pwmfan|luci-app-netwizard)=' .config || echo "!! 模组相关包丢失"
           echo "===== 被 defconfig 丢掉的（写了却没生效）====="
-          for s in CONFIG_PACKAGE_qmodem CONFIG_PACKAGE_luci-app-qmodem-generic CONFIG_PACKAGE_input-support; do
+          for s in CONFIG_PACKAGE_qmodem CONFIG_PACKAGE_luci-app-qmodem-generic CONFIG_PACKAGE_input-support CONFIG_PACKAGE_luci-theme-mint CONFIG_PACKAGE_luci-app-h5000m-fancontrol CONFIG_PACKAGE_kmod-hwmon-pwmfan CONFIG_PACKAGE_luci-app-netwizard; do
             grep -q "^${s}=y" .config || echo "  MISSING: $s"
           done
 
