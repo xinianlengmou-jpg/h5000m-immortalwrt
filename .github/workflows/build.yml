@@ -212,18 +212,20 @@ jobs:
       - name: 回传失败日志
         if: ${{ failure() }}
         continue-on-error: true
+        # 并行 make 的报错被吞在子进程里。先 -j1 V=s 重跑：已编完的部分秒过，
+        # 会在几分钟内停在真正的失败点并打出完整报错。
         run: |
-          cd "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE/wrt"
           {
-            echo "##### run ${{ github.run_number }} 编译失败日志（末尾 500 行）#####"
-            tail -500 wrt/build.log 2>/dev/null || echo "(build.log 不存在)"
+            echo "##### 1. 失败点重跑 (-j1 V=s，末尾 300 行) #####"
+            make -j1 V=s world 2>&1 | tail -300
             echo
-            echo "##### 报错行定位 #####"
-            grep -nE 'Error [0-9]+|error:|make.*\*\*\*|No space left|Killed' wrt/build.log 2>/dev/null | tail -40
+            echo "##### 2. 报错行定位 #####"
             echo
-            echo "##### 磁盘 #####"
+            echo "##### 3. 磁盘 #####"
             df -h / | tail -1
-          } > buildfail.txt 2>&1 || true
+          } > "$GITHUB_WORKSPACE/buildfail.txt" 2>&1 || true
+          cd "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main || true
