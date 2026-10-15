@@ -1,0 +1,133 @@
+name: Build H5000M
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: '底层源码分支'
+        default: 'master'
+        required: true
+        type: string
+      packages:
+        description: '临时追加插件（每行一条 CONFIG_PACKAGE_xxx=y，可留空）'
+        required: false
+        type: string
+      test:
+        description: '只导出 .config，不编译固件'
+        default: false
+        required: true
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  # 底层源码：官方主线
+  SOURCE: https://github.com/immortalwrt/immortalwrt
+  # 目标设备：只编这一台
+  TARGET: mediatek
+  SUBTARGET: filogic
+  DEVICE: hiveton_h5000m
+
+jobs:
+  build:
+    name: H5000M (${{ inputs.branch }})
+    runs-on: ubuntu-latest
+    # 平台硬上限 6h，留一点余量，否则会被直接杀掉、缓存来不及保存
+    timeout-minutes: 345
+
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+
+      - name: 安装编译依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk \
+            gcc-multilib g++-multilib gettext git libncurses-dev \
+            libssl-dev python3-setuptools rsync swig unzip \
+            zlib1g-dev file wget ccache
+
+      - name: 腾出磁盘空间
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc 2>/dev/null || true
+          df -h / | tail -1
+
+      - name: 恢复 ccache
+        uses: actions/cache@v4
+        with:
+          path: wrt/.ccache
+          key: ccache-${{ env.DEVICE }}-${{ inputs.branch }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ env.DEVICE }}-${{ inputs.branch }}-
+
+      - name: 拉取底层源码
+        run: |
+          git clone --depth=1 --single-branch --branch "${{ inputs.branch }}" "$SOURCE" wrt
+          cd wrt && git log -1 --oneline
+
+      - name: 更新官方 feeds
+        run: cd wrt && ./scripts/feeds update -a && ./scripts/feeds install -a
+
+      - name: 挂载 QModem feeds
+        run: bash "$GITHUB_WORKSPACE/scripts/feeds.sh" "$GITHUB_WORKSPACE/wrt"
+
+      - name: 生成 .config
+        env:
+          EXTRA_PACKAGES: ${{ inputs.packages }}
+        run: |
+          cd wrt
+          {
+            echo "CONFIG_TARGET_${TARGET}=y"
+            echo "CONFIG_TARGET_${TARGET}_${SUBTARGET}=y"
+            echo "CONFIG_TARGET_MULTI_PROFILE=n"
+            echo "CONFIG_TARGET_ALL_PROFILES=n"
+            echo "CONFIG_TARGET_DEVICE_${TARGET}_${SUBTARGET}_DEVICE_${DEVICE}=y"
+            cat "$GITHUB_WORKSPACE/config/base.seed"
+            cat "$GITHUB_WORKSPACE/config/packages.txt"
+            if [ -n "$EXTRA_PACKAGES" ]; then printf '%s\n' "$EXTRA_PACKAGES"; fi
+            echo "CONFIG_CCACHE=y"
+          } > .config
+          make defconfig
+
+      - name: 导出 .config
+        uses: actions/upload-artifact@v4
+        with:
+          name: config
+          path: wrt/.config
+
+      - name: 下载源码包
+        if: ${{ inputs.test != true }}
+        run: cd wrt && make download -j8
+
+      - name: 编译固件
+        if: ${{ inputs.test != true }}
+        run: cd wrt && make -j$(nproc) world
+
+      - name: 收集产物
+        if: ${{ inputs.test != true }}
+        run: |
+          mkdir -p out
+          find wrt/bin/targets -maxdepth 2 -type f \( -name '*.bin' -o -name '*.itb' -o -name '*.manifest' \) -exec cp {} out/ \;
+          ls -lh out
+
+      - name: 上传固件
+        if: ${{ inputs.test != true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-h5000m
+          path: out/*
+          if-no-files-found: error
+
+      - name: 发布 Release
+        if: ${{ inputs.test != true }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: H5000M-${{ inputs.branch }}-${{ github.run_number }}
+          name: H5000M ${{ inputs.branch }} #${{ github.run_number }}
+          files: out/*
+          body: |
+            底层源码：${{ env.SOURCE }}（分支 `${{ inputs.branch }}`）
+            设备：`${{ env.DEVICE }}`（mediatek/filogic）
+            提交：${{ github.sha }}
