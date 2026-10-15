@@ -150,7 +150,13 @@ jobs:
             echo "##### 4. profile 符号最终状态 #####"
             grep -E "hiveton|openwrt_one" .config
             echo
-            echo "##### 5. filogic 下所有可选 profile #####"
+            echo "##### 5. 第三方 feeds 装进来了哪些包 #####"
+            for f in qmodem qmodem_generic luci_theme_mint fancontrol netwizard; do
+              echo "  [feed] $f"
+              ls -1 "package/feeds/$f" 2>/dev/null | sed 's/^/    /' || echo "    ** 该 feed 没有任何包被 install **"
+            done
+            echo
+            echo "##### 6. filogic 下所有可选 profile #####"
             grep -oE "TARGET_DEVICE_mediatek_filogic_DEVICE_[a-zA-Z0-9_-]+" tmp/.config-target.in 2>/dev/null \
               | sort -u | head -40
           } > "$GITHUB_WORKSPACE/diag.txt" 2>&1 || true
