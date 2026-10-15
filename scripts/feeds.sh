@@ -46,14 +46,25 @@ fi
   && mv "$FEED_SRC/mint/theme" "$FEED_SRC/mint/luci-theme-mint"
 [ -d "$FEED_SRC/mint/wallpaper" ] && [ ! -d "$FEED_SRC/mint/luci-app-mint-wallpaper" ] \
   && mv "$FEED_SRC/mint/wallpaper" "$FEED_SRC/mint/luci-app-mint-wallpaper"
-# 两个 Makefile 里写的是 `PKG_VERSION ?=`（空值，靠 CI 注入 revision）。
+# 两个 Makefile 里写的是 `PKG_VERSION ?=` / `PKG_PO_VERSION ?=`（空值，靠 CI 注入 revision）。
 # Make 里「定义但为空」也算已定义，?= 不会补值；空版本号会让索引/打包出问题，
 # 这里给个固定版本兜底。
+# 更要命的是末尾 `include ../../luci.mk` 是**相对路径**——它按「被放进
+# feeds/luci/themes/<pkg>/」来写的，两级向上正好是 luci.mk。
+# 用 src-link 挂成独立 feed 时包在 package/feeds/<feed>/<pkg>/，两级向上什么都没有，
+# include 找不到文件 → 整包被静默跳过（实测：feeds install 有它，.config 里却没符号）。
+# 一律改成用 TOPDIR 的绝对路径引用 luci.mk。
 for mk in "$FEED_SRC/mint/luci-theme-mint/Makefile" "$FEED_SRC/mint/luci-app-mint-wallpaper/Makefile"; do
   [ -f "$mk" ] || continue
   if grep -qE '^PKG_VERSION[[:space:]]*\?=[[:space:]]*$' "$mk"; then
     sed -i -E 's/^PKG_VERSION[[:space:]]*\?=[[:space:]]*$/PKG_VERSION:=1.0.0/' "$mk"
-    echo "[feeds] $(basename "$(dirname "$mk")") 空 PKG_VERSION 已补为 1.0.0"
+  fi
+  if grep -qE '^PKG_PO_VERSION[[:space:]]*\?=[[:space:]]*$' "$mk"; then
+    sed -i -E 's/^PKG_PO_VERSION[[:space:]]*\?=[[:space:]]*$/PKG_PO_VERSION:=1.0.0/' "$mk"
+  fi
+  if grep -qE '^include[[:space:]]+\.\./\.\./luci\.mk[[:space:]]*$' "$mk"; then
+    sed -i -E 's|^include[[:space:]]+\.\./\.\./luci\.mk[[:space:]]*$|include $(TOPDIR)/feeds/luci/luci.mk|' "$mk"
+    echo "[feeds] $(basename "$(dirname "$mk")") 的 ../../luci.mk 已改为 \$(TOPDIR)/feeds/luci/luci.mk"
   fi
 done
 
