@@ -203,7 +203,36 @@ jobs:
 
       - name: 编译固件
         if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
-        run: cd wrt && make -j$(nproc) world
+        # tee 出一份日志，失败时才有东西可查（Actions 日志匿名 API 读不到）
+        run: |
+          cd wrt
+          make -j$(nproc) world 2>&1 | tee build.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: 回传失败日志
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo "##### run ${{ github.run_number }} 编译失败日志（末尾 500 行）#####"
+            tail -500 wrt/build.log 2>/dev/null || echo "(build.log 不存在)"
+            echo
+            echo "##### 报错行定位 #####"
+            grep -nE 'Error [0-9]+|error:|make.*\*\*\*|No space left|Killed' wrt/build.log 2>/dev/null | tail -40
+            echo
+            echo "##### 磁盘 #####"
+            df -h / | tail -1
+          } > buildfail.txt 2>&1 || true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main || true
+          git checkout -B config-out origin/main || true
+          mkdir -p ci-out
+          cp buildfail.txt "ci-out/buildfail.${{ github.run_number }}.txt" || true
+          git add -f ci-out || true
+          git commit -m "ci: 编译失败日志 (run ${{ github.run_number }})" || echo "无变更可提交"
+          git push -f origin config-out || echo "push 失败"
 
       - name: 收集产物
         if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
