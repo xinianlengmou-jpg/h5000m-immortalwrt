@@ -43,3 +43,16 @@ CONFIG_PACKAGE_luci-theme-mint=y
 # ============================================================
 #  下面留空：以后要加的插件往这里追加
 # ============================================================
+
+# ---------- 风扇控制（H5000M 专用）----------
+# 用户态风扇调速守护进程 + LuCI 页面。
+# 依赖 kmod-hwmon-pwmfan（pwm-fan.ko），官方 hiveton_h5000m 的
+# DEVICE_PACKAGES 里本来就带，这里显式写一份防止以后 profile 改了丢掉。
+CONFIG_PACKAGE_kmod-hwmon-pwmfan=y
+CONFIG_PACKAGE_luci-app-h5000m-fancontrol=y
+CONFIG_PACKAGE_luci-i18n-h5000m-fancontrol-zh-cn=y
+
+# ---------- 设置向导 ----------
+# 首次进 LuCI 的联网引导（WAN/LAN/无线），纯 JS + shell rpcd 插件。
+CONFIG_PACKAGE_luci-app-netwizard=y
+CONFIG_PACKAGE_luci-i18n-netwizard-zh-cn=y

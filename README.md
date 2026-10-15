@@ -32,8 +32,18 @@
 .github/workflows/build.yml  # 单文件工作流：拉源码 → 挂 feeds → 拼配置 → 编译 → 发布
 config/base.seed             # 底层：LuCI + 中文 + 基础工具（与机型无关）
 config/packages.txt          # 插件清单 ★ 要加插件改这里
-scripts/feeds.sh             # 挂载 QModem 后端与通用模组管理界面
+scripts/feeds.sh             # 挂载第三方 feeds（QModem / 模组界面 / 主题 / 风扇 / 向导）
 ```
+
+## 已装插件
+
+| 包 | 来源 | 说明 |
+| --- | --- | --- |
+| `qmodem` + `quectel-CM-5G-M` | LianXia233/QModem | 5G 拨号后端 |
+| `luci-app-qmodem-generic` | LianXia233 | 模组管理界面（自带 RG520N-CN 支持库注入） |
+| `luci-theme-mint` | LianXia233 | 界面主题（uci-defaults 自动激活） |
+| `luci-app-h5000m-fancontrol` | FAN789 | H5000M 风扇调速（依赖 `kmod-hwmon-pwmfan`） |
+| `luci-app-netwizard` | sirpdboy | 首次进 LuCI 的联网设置向导 |
 
 ## 加插件
 
@@ -58,3 +68,6 @@ scripts/feeds.sh             # 挂载 QModem 后端与通用模组管理界面
 - 模组后端（拨号器）：[LianXia233/QModem](https://github.com/LianXia233/QModem)（`QMODEM_VERSION 1.2.0`）
   —— 上游是 [FUjr/QModem](https://github.com/FUjr/QModem)（`3.4.0-rc3`），本仓库用的是她的 fork
 - 模组界面：[LianXia233/luci-app-qmodem-generic](https://github.com/LianXia233/luci-app-qmodem-generic)（Apache-2.0）
+- 主题：[LianXia233/luci-theme-mint](https://github.com/LianXia233/luci-theme-mint)
+- 风扇控制：[FAN789/luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol)（Apache-2.0）
+- 设置向导：[sirpdboy/luci-app-netwizard](https://github.com/sirpdboy/luci-app-netwizard)（GPLv3）
