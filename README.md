@@ -28,6 +28,20 @@
 
 产物：`mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-*.bin`
 
+## 出厂默认值
+
+`files/` 按 rootfs 结构摆放，会被打进固件：
+
+| 项 | 值 |
+| --- | --- |
+| LAN 地址 | `192.168.10.1/24` |
+| 用户名 / 密码 | `root` / `admin` |
+
+实现见 `files/etc/uci-defaults/99-h5000m-defaults`——uci-defaults 机制在
+**首次启动**时执行一次然后自删，所以 sysupgrade 保留配置升级时不会覆盖你自己改的设置。
+密码写的是 MD5 crypt（`$1$`，musl/busybox 必支持），直接改 `/etc/shadow`，
+不走 `echo | passwd`，不受 busybox 交互行为影响。
+
 ## 目录
 
 ```
@@ -35,6 +49,7 @@
 config/base.seed             # 底层：LuCI + 中文 + 基础工具（与机型无关）
 config/packages.txt          # 插件清单 ★ 要加插件改这里
 scripts/feeds.sh             # 挂载第三方 feeds（QModem / 模组界面 / 主题 / 风扇 / 向导）
+files/etc/uci-defaults/      # 出厂默认值（LAN 地址 / root 密码）★ 要改默认设置看这里
 ```
 
 ## 已装插件
