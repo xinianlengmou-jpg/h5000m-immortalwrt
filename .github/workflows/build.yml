@@ -118,20 +118,41 @@ jobs:
           name: config
           path: wrt/.config
 
-      # 匿名读不到 Actions 日志与 artifacts，所以把 .config 回传到
+      # 匿名读不到 Actions 日志与 artifacts，所以把诊断与 .config 回传到
       # config-out 分支（不在 push 触发列表里，不会自触发），方便外部直接 fetch 查看。
-      - name: 回传 .config 到 config-out 分支
+      - name: 回传诊断与 .config 到 config-out 分支
         if: ${{ github.ref == 'refs/heads/test' }}
         run: |
           set -e
+          cd wrt
+          {
+            echo "##### 1. filogic.mk 设备定义 #####"
+            awk '/define Device\/hiveton_h5000m/,/endef/' target/linux/mediatek/image/filogic.mk
+            echo
+            echo "##### 2. 目标 Kconfig 里该 profile 的条目 #####"
+            grep -n -B2 -A20 "TARGET_DEVICE_mediatek_filogic_DEVICE_hiveton_h5000m" tmp/.config-target.in 2>/dev/null | head -60 \
+              || echo "(tmp/.config-target.in 不存在)"
+            echo
+            echo "##### 3. DEVICE_PACKAGES 各包在源码树里有没有 #####"
+            for p in kmod-hwmon-pwmfan kmod-usb3 mt7987-2p5g-phy-firmware \
+                     kmod-mt7996e kmod-mt7992-23-firmware f2fsck mkf2fs automount; do
+              hit=$(find . -maxdepth 6 -type d -name "$p" 2>/dev/null | head -1)
+              echo "  $p -> ${hit:-** 缺失 **}"
+            done
+            echo
+            echo "##### 4. profile 符号最终状态 #####"
+            grep -E "hiveton|openwrt_one" .config || true
+          } > "$GITHUB_WORKSPACE/diag.txt" 2>&1
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
           git checkout -B config-out origin/main
           mkdir -p ci-out
           cp wrt/.config "ci-out/h5000m.${{ github.run_number }}.config"
+          cp "$GITHUB_WORKSPACE/diag.txt" "ci-out/diag.${{ github.run_number }}.txt"
           git add ci-out
-          git commit -m "ci: 输出 .config 自检结果 (run ${{ github.run_number }})"
+          git commit -m "ci: 输出 .config 与诊断 (run ${{ github.run_number }})"
           git push -f origin config-out
 
       - name: 下载源码包
