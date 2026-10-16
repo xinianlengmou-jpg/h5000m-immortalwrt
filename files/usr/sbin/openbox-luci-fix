@@ -1,0 +1,66 @@
+#!/bin/sh
+# 修 Open-Box 页面「操作失败:服务操作未成功 (disable)」
+#
+# 背景：Open-Box 的 main.js 用
+#           ubus call luci setInitAction {name, action}
+#   来做启动/停止/重启/开关自启。但新版 rpcd-mod-luci（/usr/lib/rpcd/luci.so）
+#   已经把 setInitAction 删掉了，ubus 直接回
+#           Command failed: ... (Method not found)
+#   于是页面上每个服务按钮都弹「操作失败:服务操作未成功 (xxx)」，
+#   看着像 Open-Box 坏了，其实 Open-Box 本身跑得好好的。
+#
+# 处理：换成 rpcd 自带、一直都在的
+#           ubus call rc init {name, action}
+#   实测 disable / enable 都会真的增删 /etc/rc.d 里的链接。
+#   顺手在 ACL 里补上 rc:init 授权（root 登录本来不受 ACL 限制，
+#   主要是给以后可能新建的非 root 账号留好后路）。
+#
+# 幂等：main.js 里留下 openbox-luci-fix 标记后就跳过；
+#       Open-Box 自己更新覆盖了 main.js，再跑一次即可。
+
+JS=/www/luci-static/resources/view/openbox/main.js
+ACL=/usr/share/rpcd/acl.d/luci-app-openbox.json
+
+[ -f "$JS" ] || exit 0
+
+if ! grep -q 'openbox-luci-fix' "$JS"; then
+	cp "$JS" "$JS.pre-fix" 2>/dev/null
+
+	awk -v Q="'" '
+		/^var callInitAction = rpc\.declare\(\{/ { blk = 1 }
+		blk && /^\}\);$/ { blk = 0 }
+		{
+			if (blk) {
+				if (index($0, "object: " Q "luci" Q) > 0)          { print "\tobject: " Q "rc" Q ","; next }
+				if (index($0, "method: " Q "setInitAction" Q) > 0) { print "\tmethod: " Q "init" Q ","; next }
+				if (index($0, "expect:") > 0)                      { next }
+			}
+			if (index($0, "return callInitAction(name, action).then(function (ok) {") > 0) {
+				print "\t\t\t/* [openbox-luci-fix] rc.init 成功时不返回数据，没抛错就算成功 */"
+				print "\t\t\treturn callInitAction(name, action).then(function () {"
+				skip = 3
+				next
+			}
+			if (skip > 0) { skip--; next }
+			print
+		}
+	' "$JS" >"$JS.new" || { rm -f "$JS.new"; exit 1; }
+
+	# 自检：非空、带标记、且不再出现 setInitAction
+	[ -s "$JS.new" ] || { rm -f "$JS.new"; exit 1; }
+	grep -q 'openbox-luci-fix' "$JS.new" || { rm -f "$JS.new"; exit 1; }
+	grep -q 'setInitAction' "$JS.new" && { rm -f "$JS.new"; exit 1; }
+
+	mv "$JS.new" "$JS"
+	logger -t openbox-luci-fix "main.js 的 luci.setInitAction 已换成 rc.init"
+fi
+
+if [ -f "$ACL" ] && ! grep -q '"rc"' "$ACL"; then
+	sed -i 's|"ubus": { "luci": \[ "setInitAction" \] }|"ubus": { "luci": [ "setInitAction" ], "rc": [ "init" ] }|' "$ACL"
+	logger -t openbox-luci-fix "ACL 已补 rc: init 授权"
+fi
+
+# 让 LuCI / 浏览器拿到新文件
+rm -f /tmp/luci-indexcache* /tmp/luci-modulecache* 2>/dev/null
+
+exit 0
