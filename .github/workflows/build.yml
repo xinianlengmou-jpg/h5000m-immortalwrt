@@ -223,7 +223,7 @@ jobs:
                   # 两种写法都要认：define Package/xxx  和  Package/xxx = $(call ...)
                   # （linux-firmware 的 mediatek.mk 就是后一种）
                   kmod-*) pat="KernelPackage/${p#kmod-}([[:space:]]|$)" ;;
-                  *)      pat="(PKG_NAME:=${p}[[:space:]]*$|Package/${p}([[:space:]]|=))" ;;
+                  *)      pat="(PKG_NAME:=${p}[[:space:]]*$|Package/${p}([[:space:]]|=|$))" ;;
                 esac
                 # 注意：多数包的配方文件叫 Makefile，不是 *.mk，两个都要搜
                 hit=$(grep -rlE --include='*.mk' --include='Makefile' "$pat" package target 2>/dev/null | head -1)
