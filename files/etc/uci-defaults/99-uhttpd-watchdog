@@ -1,0 +1,11 @@
+#!/bin/sh
+# 首次开机：给 uhttpd 看门狗赋可执行位并设为开机自启。
+# uci-defaults 脚本成功执行（exit 0）后会被自动删除，只跑一次。
+
+for f in /usr/sbin/uhttpd-watchdog /etc/init.d/uhttpd-watchdog; do
+	[ -f "$f" ] && chmod 755 "$f"
+done
+
+[ -x /etc/init.d/uhttpd-watchdog ] && /etc/init.d/uhttpd-watchdog enable >/dev/null 2>&1
+
+exit 0
