@@ -60,7 +60,6 @@ files/etc/uci-defaults/      # 出厂默认值（LAN 地址 / root 密码）★ 
 | `luci-app-qmodem-generic` | LianXia233 | 模组管理界面（自带 RG520N-CN 支持库注入） |
 | `luci-theme-mint` | LianXia233 | 界面主题（uci-defaults 自动激活） |
 | `luci-app-h5000m-fancontrol` | FAN789 | H5000M 风扇调速（依赖 `kmod-hwmon-pwmfan`） |
-| `luci-app-netwizard` | sirpdboy | 首次进 LuCI 的联网设置向导 |
 
 ## 加插件
 
@@ -96,4 +95,3 @@ files/etc/uci-defaults/      # 出厂默认值（LAN 地址 / root 密码）★ 
 - 模组界面：[LianXia233/luci-app-qmodem-generic](https://github.com/LianXia233/luci-app-qmodem-generic)（Apache-2.0）
 - 主题：[LianXia233/luci-theme-mint](https://github.com/LianXia233/luci-theme-mint)
 - 风扇控制：[FAN789/luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol)（Apache-2.0）
-- 设置向导：[sirpdboy/luci-app-netwizard](https://github.com/sirpdboy/luci-app-netwizard)（GPLv3）

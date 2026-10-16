@@ -94,15 +94,6 @@ if [ ! -d "$FEED_SRC/fancontrol/luci-app-h5000m-fancontrol" ]; then
     "$FEED_SRC/fancontrol/luci-app-h5000m-fancontrol"
 fi
 
-# ---- 设置向导 ----
-# sirpdboy 版网络设置向导：首次进 LuCI 引导配 WAN/LAN/无线。
-# 这个仓库本身把包藏在 luci-app-netwizard/ 子目录里，正好一层，直接挂根目录即可。
-# 纯 JS + /bin/sh 的 rpcd 插件，无 python/lua 依赖。
-if [ ! -d "$FEED_SRC/netwizard" ]; then
-  git clone --depth=1 --single-branch --branch main \
-    https://github.com/sirpdboy/luci-app-netwizard.git "$FEED_SRC/netwizard"
-fi
-
 # ---- apk 版本号合法性修正（否则整个固件构建会被阻断）----
 # OpenWrt 新版 apk 打包器不接受 `X.Y.Z-rc.N`：版本串被拼成 `3.4.0-rc.3-rN` 后
 # apk mkpkg 报 "package version is invalid" (Error 99)，构建全灭。
@@ -125,18 +116,16 @@ touch feeds.conf.default
 for pair in "qmodem:$FEED_SRC/qmodem" \
             "qmodem_generic:$FEED_SRC/qmodem-generic" \
             "luci_theme_mint:$FEED_SRC/mint" \
-            "fancontrol:$FEED_SRC/fancontrol" \
-            "netwizard:$FEED_SRC/netwizard"; do
+            "fancontrol:$FEED_SRC/fancontrol"; do
   name="${pair%%:*}"; path="${pair#*:}"
   grep -q "^src-link ${name} " feeds.conf.default \
     || echo "src-link ${name} ${path}" >> feeds.conf.default
 done
 
-./scripts/feeds update qmodem qmodem_generic luci_theme_mint fancontrol netwizard
+./scripts/feeds update qmodem qmodem_generic luci_theme_mint fancontrol
 ./scripts/feeds install -a -p qmodem
 ./scripts/feeds install -a -p qmodem_generic
 ./scripts/feeds install -a -p luci_theme_mint
 ./scripts/feeds install -a -p fancontrol
-./scripts/feeds install -a -p netwizard
 
 echo "[feeds] 已就绪"

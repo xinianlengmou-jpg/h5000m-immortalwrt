@@ -53,8 +53,3 @@ CONFIG_PACKAGE_luci-i18n-mint-zh-cn=y
 CONFIG_PACKAGE_kmod-hwmon-pwmfan=y
 CONFIG_PACKAGE_luci-app-h5000m-fancontrol=y
 CONFIG_PACKAGE_luci-i18n-h5000m-fancontrol-zh-cn=y
-
-# ---------- 设置向导 ----------
-# 首次进 LuCI 的联网引导（WAN/LAN/无线），纯 JS + shell rpcd 插件。
-CONFIG_PACKAGE_luci-app-netwizard=y
-CONFIG_PACKAGE_luci-i18n-netwizard-zh-cn=y
