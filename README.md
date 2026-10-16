@@ -56,7 +56,7 @@ files/etc/uci-defaults/      # 出厂默认值（LAN 地址 / root 密码）★ 
 
 | 包 | 来源 | 说明 |
 | --- | --- | --- |
-| `qmodem` + `quectel-CM-5G-M` | LianXia233/QModem | 5G 拨号后端 |
+| `qmodem` + `quectel-CM-5G-M` | FUjr/QModem 主线 | 5G 拨号后端（`3.4.0_rc3`，纯 C + shell） |
 | `luci-app-qmodem-generic` | LianXia233 | 模组管理界面（自带 RG520N-CN 支持库注入） |
 | `luci-theme-mint` | LianXia233 | 界面主题（uci-defaults 自动激活） |
 | `luci-app-h5000m-fancontrol` | FAN789 | H5000M 风扇调速（依赖 `kmod-hwmon-pwmfan`） |
@@ -72,18 +72,27 @@ files/etc/uci-defaults/      # 出厂默认值（LAN 地址 / root 密码）★ 
 
 ## 关于 RG520N-CN
 
-模组是 Quectel RG520N-CN（`2c7c:0801`），不在 QModem 上游 `modem_support.json` 里。
+模组是 Quectel RG520N-CN（`2c7c:0801`）。上游 `modem_support.json` 里只有
+`rg520n-eu` / `rg520n-eb`，**没有 `-cn` 中国版**。
 `luci-app-qmodem-generic` 自带 `extra_modem_support.json`（含该型号），
 安装时和每次开机自动幂等注入（写前备份、写后 JSON 校验失败回滚），
 **不需要手工改 `modem_support.json`**。
+（这也是后端换回 FUjr 主线后 RG520N-CN 依然可用的原因。）
 
 ## 许可
 
 编译脚本与配置自写。上游与第三方：
 
 - 底层：[immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt)
-- 模组后端（拨号器）：[LianXia233/QModem](https://github.com/LianXia233/QModem)（`QMODEM_VERSION 1.2.0`）
-  —— 上游是 [FUjr/QModem](https://github.com/FUjr/QModem)（`3.4.0-rc3`），本仓库用的是她的 fork
+- 模组后端（拨号器）：[FUjr/QModem](https://github.com/FUjr/QModem) 主线（`3.4.0_rc3`）
+
+> ⚠️ **后端不要用 LianXia233/QModem 那个 1.2.0 fork**，会和 `luci-app-qmodem-generic` 撞车：
+> generic 自带 `qmodem-worker` / `qmodem-stats-collect` / `qmodem-modem-support` /
+> `qmodem-mt5700-fix` 及 rpcd 插件 `qmodem_cache`·`qmodem_stats`·`qmodem_support`·`qos`，
+> 而 1.2.0 fork 把这些同名文件也实现了一遍 → apk 报 17 条
+> `trying to overwrite ... owned by qmodem` → `package/install` Error 1（源码已全编译完，
+> 卡在组装 rootfs）。FUjr 主线这些同名文件一个都没有，正好互补。
+> 另外 1.2.0 fork 要 `cargo` 交叉编译 rust workspace，低配机器编不动。
 - 模组界面：[LianXia233/luci-app-qmodem-generic](https://github.com/LianXia233/luci-app-qmodem-generic)（Apache-2.0）
 - 主题：[LianXia233/luci-theme-mint](https://github.com/LianXia233/luci-theme-mint)
 - 风扇控制：[FAN789/luci-app-h5000m-fancontrol](https://github.com/FAN789/luci-app-h5000m-fancontrol)（Apache-2.0）

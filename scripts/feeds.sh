@@ -11,16 +11,30 @@ FEED_SRC="$WORKSPACE/_feeds"
 mkdir -p "$FEED_SRC"
 
 # ---- QModem 后端（拨号器）----
-# 用 LianXia233/QModem（她从上游 FUjr/QModem fork 的版本，QMODEM_VERSION 1.2.0）。
-# 上游 FUjr 是 3.4.0-rc3；选她的原因：更新更勤，且后端原生支持读
-# extra_modem_support.json（上游 FUjr 不读），RG520N-CN 多一层保障。
-# 依赖写的是不带版本号的库名（+libubus +libubox +libblobmsg-json +libuci），
-# 源码编译不受旧 ABI 影响。
+# 用上游 FUjr/QModem 主线（当前 3.4.0_rc3）。**不要**换成 LianXia233 的 1.2.0 fork，
+# 两个都是实测踩出来的硬伤：
+#  1) 文件冲突：luci-app-qmodem-generic 2.5.0 自己打包了一层增强版周边服务
+#     （qmodem-worker / qmodem-stats-collect / qmodem-stats-loop / qmodem-task /
+#      qmodem-modem-support / qmodem-mt5700-fix，以及 rpcd 插件
+#      qmodem_cache·qmodem_stats·qmodem_support·qos）。
+#     LianXia233 的 1.2.0 fork 是重构版，把同名文件也实现了一遍 → 两个包往同一批路径写，
+#     apk 报 17 条 "trying to overwrite ... owned by qmodem" → package/install Error 1，
+#     源码全编译完了却卡在组装 rootfs。FUjr 主线这些同名文件一个都没有，
+#     与 generic 正好互补（generic 的 Makefile 写的就是 LUCI_DEPENDS:=+luci-base +qmodem，
+#     README 指定的后端也是 FUjr 主线）。
+#  2) Rust：1.2.0 fork 的 Makefile 有 Build/CompileRust，调 build-rust.sh 交叉编译
+#     仓库根的 rust/ workspace（产物 qmodem-atd，triple aarch64-unknown-linux-musl）；
+#     低配机器（如 3.3G 内存的虚拟机）编不动，实测 package/feeds/qmodem/qmodem failed to build。
+#     主线是纯 C + shell，无 Rust。
+# 版本号：主线自带 3.4.0_rc3（上游已把 -rc.3 改成 apk 合法的 _rc3），
+#   下面 version.mk 的改写保护会自动跳过。
+# RG520N-CN 不会丢：主线 modem_support.json 只有 rg520n-eu / rg520n-eb，
+#   rg520n-cn 由 generic 自带的 extra_modem_support.json + 幂等合并脚本开机注入。
 # 仓库结构是 application/* 与 luci/*，直接 src-git 扫不到包，
 # 所以 clone 到本地再用 src-link 注册为本地 feed。
 if [ ! -d "$FEED_SRC/qmodem" ]; then
   git clone --depth=1 --single-branch --branch main \
-    https://github.com/LianXia233/QModem.git "$FEED_SRC/qmodem"
+    https://github.com/FUjr/QModem.git "$FEED_SRC/qmodem"
 fi
 
 # ---- 通用模组管理界面 ----
@@ -93,8 +107,8 @@ fi
 # OpenWrt 新版 apk 打包器不接受 `X.Y.Z-rc.N`：版本串被拼成 `3.4.0-rc.3-rN` 后
 # apk mkpkg 报 "package version is invalid" (Error 99)，构建全灭。
 # 改写成 apk 合法的 `X.Y.Z_rcN`；只影响包版本元数据。
-# 当前用的 LianXia233 版是 `1.2.0`，本身合法、会自动跳过；
-# 万一以后切回上游 FUjr（3.4.0-rc.3）或有 -rc.N 回退，这道保护就生效。
+# 当前用的 FUjr 主线是 `3.4.0_rc3`（上游已自行改成 apk 合法形式），会自动跳过；
+# 万一将来上游回退成 `-rc.N` 写法或有别的包带这类版本，这道保护就生效。
 VER_FILE="$FEED_SRC/qmodem/version.mk"
 if [ -f "$VER_FILE" ]; then
   if grep -qE '^QMODEM_VERSION:=[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$' "$VER_FILE"; then
