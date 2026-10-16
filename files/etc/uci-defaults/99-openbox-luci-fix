@@ -1,0 +1,11 @@
+#!/bin/sh
+# 首次开机：给 Open-Box 补丁脚本赋可执行位并设开机自启。
+# 补丁本身在脚本里判断 Open-Box 是否安装，没装就直接退出。
+
+for f in /usr/sbin/openbox-luci-fix /etc/init.d/openbox-luci-fix; do
+	[ -f "$f" ] && chmod 755 "$f"
+done
+
+[ -x /etc/init.d/openbox-luci-fix ] && /etc/init.d/openbox-luci-fix enable >/dev/null 2>&1
+
+exit 0

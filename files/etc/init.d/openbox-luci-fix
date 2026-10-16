@@ -1,0 +1,15 @@
+#!/bin/sh /etc/rc.common
+# 开机时补一次 Open-Box 的 LuCI 服务操作补丁。
+# 只在 Open-Box 确实装了（main.js 存在）时才动作；补丁自身幂等。
+# Open-Box 面板自己更新会覆盖 main.js，重启后本脚本会再补一次。
+
+START=97
+STOP=01
+
+start() {
+	/usr/sbin/openbox-luci-fix
+}
+
+boot() {
+	/usr/sbin/openbox-luci-fix
+}
