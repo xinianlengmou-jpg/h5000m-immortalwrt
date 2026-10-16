@@ -1,0 +1,40 @@
+#!/bin/sh
+# 修 QModem 的 AT 命令通道：send_at 默认走 ubus-at-daemon，别直接抢串口
+#
+# 现象：LuCI「模组管理 → AT 控制台」时通时不通，发命令经常空返回；
+#       ubus call qmodem send_at 返回 {"at_cfg":{"status":"0"}}（没有 res）。
+#
+# 原因：/usr/libexec/rpcd/qmodem 的 send_at 分支读的是
+#           params.use_ubus_flag
+#       而前端 controls.js 发的键名是 use_ubus —— 两个名字对不上，
+#       use_ubus_flag 永远为空，于是 tom_modem 不带 -u，直接去开串口。
+#       但串口归 ubus-at-daemon 管（qmodem.<section>.use_ubus='1'），
+#       两边抢同一个 /dev/ttyUSBx，谁抢到谁赢，输的那个报
+#       "[ERR]Failed to run operation 1"。实测裸跑失败率约 1/3。
+#
+# 处理：在取到 use_ubus_flag 之后补一条兜底——没有显式指定时，
+#       回落到 UCI 的 use_ubus（也就是 1），tom_modem 就会带 -u 走 daemon 串行化。
+# 幂等，只在没打过补丁时改；rpcd 会在本脚本之后由系统重载/重启生效。
+
+F=/usr/libexec/rpcd/qmodem
+
+[ -f "$F" ] || exit 0
+grep -q 'send_at)' "$F" || exit 0
+grep -q 'qmodem\."\$config_section"\.use_ubus' "$F" && exit 0
+
+cp "$F" "$F.bak" 2>/dev/null
+
+awk '{print}
+	index($0,"use_ubus_flag=")>0 && index($0,"jq")>0 && !d {
+		print "                case \"$use_ubus_flag\" in 1|true) ;; *) use_ubus_flag=$(uci -q get qmodem.\"$config_section\".use_ubus 2>/dev/null);; esac"
+		d=1
+	}' "$F" >"$F.new" || exit 1
+
+[ -s "$F.new" ] || exit 1
+grep -q 'use_ubus' "$F.new" || exit 1
+mv "$F.new" "$F"
+chmod 755 "$F"
+
+logger -t qmodem-at-ubus "已修补 rpcd/qmodem 的 send_at：use_ubus_flag 缺省回落到 UCI use_ubus"
+
+exit 0
