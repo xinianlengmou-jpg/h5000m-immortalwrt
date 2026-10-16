@@ -17,6 +17,12 @@ CONFIG_PACKAGE_qmodem_INCLUDE_generic-qmi-wwan=y
 # 拨号 CM choice 显式声明，防止上游改默认值后静默漂移
 CONFIG_PACKAGE_qmodem_USE_TOM_CUSTOMIZED_QUECTEL_CM=y
 
+# ---------- TUN/TAP（VPN、隧道类软件的底座）----------
+# 官方 snapshot 仓库**不发布** kmod-tun（内核默认没开 CONFIG_TUN，包编不出来），
+# 所以 apk add kmod-tun 会报 no such package。要 TUN 只能自己编进固件。
+# 装上后 /dev/net/tun 才会出现。
+CONFIG_PACKAGE_kmod-tun=y
+
 # ---------- 5G 模组：USB 基础 ----------
 CONFIG_PACKAGE_kmod-usb2=y
 CONFIG_PACKAGE_kmod-usb3=y
