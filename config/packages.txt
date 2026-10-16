@@ -41,6 +41,10 @@ CONFIG_PACKAGE_luci-i18n-qmodem-zh-cn=n
 CONFIG_PACKAGE_luci-theme-mint=y
 # 中文语言包（包名按 luci.mk 规则由 po 文件生成；名字不对的话 defconfig 会自动丢掉，无害）
 CONFIG_PACKAGE_luci-i18n-mint-zh-cn=y
+# 必须装！mint 概览仪表盘的 ubus 后端（rpcd 插件 mint.dashboard + ACL）
+# 打包在壁纸包里而不是主题包里。缺了它概览页所有指标恒为 "--"。
+CONFIG_PACKAGE_luci-app-mint-wallpaper=y
+CONFIG_PACKAGE_luci-i18n-mint-wallpaper-zh-cn=y
 
 # ============================================================
 #  下面留空：以后要加的插件往这里追加
