@@ -25,6 +25,15 @@ on:
   push:
     branches: [build, test]
 
+  # 每周一 09:00（北京时间；GitHub cron 用 UTC，故写 01:00）自动做一次配置自检：
+  # 只导出 .config + 跑关键配置自检，几分钟出结果，不编译固件、不发 Release。
+  # 目的：上游（immortalwrt master / qmodem / mint / generic）一旦有变动导致
+  #   依赖缺失、包被改名、libnftnl 版本漂移，能在想刷机之前就知道。
+  # 结果看两处：Actions 该次运行的 step 级成败，以及 config-out 分支里的
+  #   ci-out/diag.<run>.txt 与 h5000m.<run>.config。
+  schedule:
+    - cron: '0 1 * * 1'
+
 # 注意：一旦显式写 permissions 块，未列出的 scope 全部归零。
 # 少了 actions: write 的话 upload-artifact 会静默不产出（也不报错）。
 permissions:
@@ -38,6 +47,11 @@ env:
   TARGET: mediatek
   SUBTARGET: filogic
   DEVICE: hiveton_h5000m
+  # 是否只做「配置自检」（不编译固件、不发 Release）：
+  #   - 推送到 test 分支
+  #   - 或每周定时自检（on.schedule）
+  # 正式编译（build 分支推送 / workflow_dispatch）时为 false。
+  TEST_MODE: ${{ github.ref == 'refs/heads/test' || github.event_name == 'schedule' }}
   # 底层源码固定到这个 commit（2026-10-15 20:59，故障 merge 之前）。
   # 原因：上游 2026-10-16 03:22 的 "Merge Official Source"(95fa0528c4) 把
   #   package/libs/libnftnl 推到 1.3.2，但它自带的 fullcone 补丁
@@ -46,7 +60,10 @@ env:
   #   整个 world 中断。等上游修好（libnftnl 与 fullcone 补丁重新对齐）后，
   #   把这一行清空即可恢复跟踪 master。
   # 留空 = 跟踪分支最新。
-  SOURCE_PIN: 2caedb4b48c8d25aa5d14edfb8707005b0bd95f6
+  # 2026-10-16 起恢复跟踪 master：依赖缺失 / 包改名 / libnftnl 版本漂移这类
+  # 上游变动，改由每周自检（见 on.schedule）提前发现，而不是靠钉死版本躲过去。
+  # 真被上游搞挂时，把 commit sha 填回这一行即可临时止血。
+  SOURCE_PIN: ''
 
 jobs:
   build:
@@ -165,7 +182,7 @@ jobs:
           path: wrt/.config
 
       - name: 生成诊断
-        if: ${{ github.ref == 'refs/heads/test' }}
+        if: ${{ env.TEST_MODE == 'true' }}
         continue-on-error: true
         run: |
           cd "$GITHUB_WORKSPACE/wrt"
@@ -206,7 +223,7 @@ jobs:
           } > "$GITHUB_WORKSPACE/diag.txt" 2>&1 || true
 
       - name: 回传诊断与 .config 到 config-out 分支
-        if: ${{ github.ref == 'refs/heads/test' }}
+        if: ${{ env.TEST_MODE == 'true' }}
         continue-on-error: true
         run: |
           cd "$GITHUB_WORKSPACE"
@@ -222,11 +239,11 @@ jobs:
           git push -f origin config-out || echo "push 失败"
 
       - name: 下载源码包
-        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
+        if: ${{ inputs.test != true && env.TEST_MODE != 'true' }}
         run: cd wrt && make download -j8
 
       - name: 编译固件
-        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
+        if: ${{ inputs.test != true && env.TEST_MODE != 'true' }}
         # tee 出一份日志，失败时才有东西可查（Actions 日志匿名 API 读不到）
         run: |
           cd wrt
@@ -261,7 +278,7 @@ jobs:
           git push -f origin config-out || echo "push 失败"
 
       - name: 收集产物
-        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
+        if: ${{ inputs.test != true && env.TEST_MODE != 'true' }}
         run: |
           mkdir -p out
           # 镜像实际落在 bin/targets/<target>/<subtarget>/ 下（相对 wrt/bin/targets 是第 3 层），
@@ -274,7 +291,7 @@ jobs:
           [ -n "$(ls -A out)" ] || { echo "!! out/ 为空，打印 bin/targets 实际结构"; find wrt/bin/targets -maxdepth 4 | head -40; exit 1; }
 
       - name: 上传固件
-        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
+        if: ${{ inputs.test != true && env.TEST_MODE != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: firmware-h5000m
@@ -282,7 +299,7 @@ jobs:
           if-no-files-found: error
 
       - name: 发布 Release
-        if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
+        if: ${{ inputs.test != true && env.TEST_MODE != 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: H5000M-${{ inputs.branch || 'master' }}-${{ github.run_number }}
