@@ -1,0 +1,33 @@
+#!/bin/sh
+# Quectel RG520N-CN（USB 2c7c:0801）在 ECM 模式下的接口表补齐
+#
+# 现象：把模组切到 ECM 后，qmodem 认不到它，日志一直刷
+#     slot=2-1 type=usb has no net device yet
+#     give up add slot=2-1 type=usb after 5 attempts
+# 结果就是开机后不拨号、一直离线。
+#
+# 原因：ECM 模式下数据网卡挂在 USB 接口 1.10，而 qmodem 自带的
+# /usr/share/qmodem/modem_port_rule.json 只为 2c7c:0801 登记了
+# 1.2 / 1.3 / 1.4（那是 QMI 模式的布局，网卡在 1.4）。
+# 扫描器按这张表过滤接口，1.10 直接被丢掉。
+#
+# 处理：把 1.10 / 1.11 补进 include。幂等，只在没打过补丁时改。
+# 注意：补丁改完后需要重启（或重启 modem_scand）才会被重新读取。
+
+F=/usr/share/qmodem/modem_port_rule.json
+
+[ -f "$F" ] || exit 0
+grep -q '"2c7c:0801"' "$F" || exit 0
+grep -q '"1.10"' "$F" && exit 0
+
+cp "$F" "$F.bak" 2>/dev/null
+
+awk 'BEGIN{d=0} { if (!d && $0 ~ /"1\.4"/) { sub(/"1\.4"/, "\"1.4\",\"1.10\",\"1.11\""); d=1 } print }' \
+	"$F" >"$F.new" || exit 1
+
+[ -s "$F.new" ] || exit 1
+mv "$F.new" "$F"
+
+logger -t qmodem-rg520n-cn "已在 modem_port_rule.json 的 2c7c:0801 中补入接口 1.10/1.11"
+
+exit 0
