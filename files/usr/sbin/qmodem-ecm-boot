@@ -1,0 +1,128 @@
+#!/bin/sh
+# qmodem-ecm-boot -- 开机兜底：给 ECM / NCM / RNDIS 类蜂窝模组补上自动拨号
+#
+# 背景（Quectel RG520N-CN 实测）
+#   该模组切到 ECM 模式后，数据网卡挂在 USB 接口 2-1:1.10，但它的 USB 配置
+#   描述符是畸形的——声明 6 个接口，实际却编号到 11：
+#       usb 2-1: config 1 has an invalid interface number: 10 but max is 6
+#   qmodem 的 modem_scand 按 bNumInterfaces 只遍历 0..5，永远看不到 1.10，
+#   于是日志里刷：
+#       slot=2-1 type=usb has no net device yet
+#       give up add slot=2-1 type=usb after 5 attempts
+#   模组不会被注册，也不会拨号，开机后一直离线。
+#
+# 本脚本绕开扫描器：直接把 /sys 下出现的网卡与 qmodem 的 modem-device 段对上，
+# 置 state=enabled、network=<网卡>，然后下发 modem_dial。
+#
+# 安全边界
+#   * 只在网卡驱动是 cdc_ether / cdc_ncm / rndis_host 时才动作
+#     （QMI / MBIM / MHI 模式不干预，避免影响本来就正常的拨号）
+#   * 幂等：已经在拨号就什么都不做
+#   * 找不到网卡最多等 MAX_WAIT 秒后放弃，不会卡住开机
+
+LOG=/tmp/qmodem-ecm-boot.log
+DONE=/tmp/.qmodem-ecm-boot.done
+MAX_WAIT=180
+
+log() {
+	echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >>"$LOG"
+	logger -t qmodem-ecm-boot "$*"
+}
+
+# 在模组的 USB 路径下找数据网卡，例如 /sys/bus/usb/devices/2-1/ -> usb0
+netdev_of() {
+	local d
+	for d in "$1"/*/net/*; do
+		[ -d "$d" ] || continue
+		basename "$d"
+		return 0
+	done
+	return 1
+}
+
+# 网卡绑定的驱动名，例如 cdc_ether
+driver_of() {
+	[ -e "/sys/class/net/$1/device/driver" ] || return 1
+	basename "$(readlink "/sys/class/net/$1/device/driver")"
+}
+
+handle_section() {
+	local sec="$1" path dev drv enable state run
+
+	config_get path "$sec" path
+	[ -n "$path" ] || return 1
+	[ -d "$path" ] || return 1
+
+	config_get enable "$sec" enable_dial
+	[ "$enable" = "1" ] || return 1
+
+	dev="$(netdev_of "$path")" || return 1
+	drv="$(driver_of "$dev")" || return 1
+
+	case "$drv" in
+	cdc_ether | cdc_ncm | rndis_host) ;;
+	*)
+		return 1
+		;;
+	esac
+
+	config_get state "$sec" state
+	log "hit: section=$sec net=$dev driver=$drv state=$state"
+
+	uci -q set "qmodem.$sec.state=enabled"
+	uci -q set "qmodem.$sec.network=$dev"
+	uci commit qmodem
+
+	run="$(ubus call qmodem dial_status "{\"config_section\":\"$sec\"}" 2>/dev/null |
+		sed -n 's/.*"running":[[:space:]]*"\([a-z]*\)".*/\1/p')"
+	if [ "$run" = "true" ]; then
+		log "section=$sec 已在拨号，跳过"
+		echo 1 >"$DONE"
+		return 0
+	fi
+
+	ubus call qmodem modem_dial "{\"config_section\":\"$sec\"}" >/dev/null 2>&1
+	log "section=$sec 已下发 modem_dial (rc=$?)"
+	echo 1 >"$DONE"
+	return 0
+}
+
+wait_ubus() {
+	local i=0
+	while [ "$i" -lt 60 ]; do
+		ubus list qmodem >/dev/null 2>&1 && return 0
+		sleep 2
+		i=$((i + 2))
+	done
+	return 1
+}
+
+main() {
+	: >"$LOG"
+	: >"$DONE"
+	log "start pid=$$"
+
+	wait_ubus || {
+		log "ubus 上没有 qmodem 对象，放弃"
+		return 1
+	}
+
+	. /lib/functions.sh
+
+	local i=0
+	while [ "$i" -lt "$MAX_WAIT" ]; do
+		config_load qmodem
+		config_foreach handle_section modem-device
+		[ -s "$DONE" ] && {
+			log "完成，用时 ${i}s"
+			return 0
+		}
+		sleep 5
+		i=$((i + 5))
+	done
+
+	log "等待 ${MAX_WAIT}s 仍未找到可用的 ECM/NCM/RNDIS 网卡，放弃"
+	return 1
+}
+
+main "$@"

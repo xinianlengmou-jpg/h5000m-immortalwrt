@@ -49,7 +49,9 @@
 config/base.seed             # 底层：LuCI + 中文 + 基础工具（与机型无关）
 config/packages.txt          # 插件清单 ★ 要加插件改这里
 scripts/feeds.sh             # 挂载第三方 feeds（QModem / 模组界面 / 主题 / 风扇 / 向导）
-files/etc/uci-defaults/      # 出厂默认值（LAN 地址 / root 密码）★ 要改默认设置看这里
+files/etc/uci-defaults/      # 出厂默认值（LAN 地址 / root 密码 / RG520N-CN 接口表）
+files/usr/sbin/              # qmodem-ecm-boot：ECM 模组开机兜底拨号
+files/etc/init.d/            # 上面那个的 procd 启动脚本（START=99）
 ```
 
 ## 已装插件
@@ -77,6 +79,65 @@ files/etc/uci-defaults/      # 出厂默认值（LAN 地址 / root 密码）★ 
 安装时和每次开机自动幂等注入（写前备份、写后 JSON 校验失败回滚），
 **不需要手工改 `modem_support.json`**。
 （这也是后端换回 FUjr 主线后 RG520N-CN 依然可用的原因。）
+
+### 已知问题：QMI 模式数据面不通，需改用 ECM
+
+**症状**：拨号看起来成功——能注册、能激活 PDP、能拿到 IP 和 DNS，默认路由也在，
+但就是上不了网。下行全坏：
+
+- `raw_ip=N` 时 `wwan0` 收到 **0 字节 / 0 包**
+- 手动 `echo Y > /sys/class/net/wwan0/qmi/raw_ip` 后能收包了，但 `rx errs` 十几万且持续增长
+- conntrack 条目全是 `[UNREPLIED]`，ping 网关和公网 100% 丢包，上行却是通的
+
+**归因**：约九成是**系统侧**的问题，模组本身没问题。
+
+- 排除法：切到 ECM 后，同一块模组、同一张卡、同一运营商、同一个内核 6.18，
+  数据面 100% 正常 → 蜂窝能力 / SIM / APN / 内核 USB 栈 / netifd / 防火墙 NAT 全部无责
+- QMI 控制面正常（注册、激活、取 IP 都成功）→ 只坏数据面封装
+- 主线 `qmi_wwan.ko` 里是有 `usb:v2C7Cp0801d*...` alias 的，驱动**认得**这颗模组
+- `quectel-CM-M` 二进制里同时存在两条 sysfs 路径：
+  `/sys/class/net/%s/qmi/rawip`（无下划线，Quectel 定制驱动 `qmi_wwan_q` 的属性名）和
+  `/sys/class/net/%s/qmi/raw_ip`（有下划线，主线 `qmi_wwan` 的属性名）。
+  这套固件用的是主线驱动，raw-ip 协商没走通（`raw_ip` 一直停在 `N`）
+
+模组固件本身只有一处瑕疵，且不影响上网：ECM 模式下它的 USB 配置描述符是畸形的
+（声明 6 个接口却编号到 11），内核会报
+`usb 2-1: config 1 has an invalid interface number: 10 but max is 6`。
+这只影响 qmodem 的自动识别（见下），不影响数据收发。
+
+**解法**：把模组切到 ECM（usbnet 映射：`0`=qmi `1`=ecm `2`=mbim `3`=rndis `5`=ncm）。
+
+```sh
+# 切模式（只下发 AT+QCFG="usbnet",1，不会自己重启模组）
+ubus call qmodem set_mode '{"config_section":"2_1","mode":"ecm"}'
+# 重启模组让设置生效（ubus 的 do_reboot 实测无效，别用）
+tom_modem -d /dev/ttyUSB2 -o a -c 'AT+CFUN=1,1'
+# 读回确认
+tom_modem -d /dev/ttyUSB2 -o a -c 'AT+QCFG="usbnet"'   # -> +QCFG: "usbnet",1
+```
+
+该模组**不支持 NCM**（`AT+QCFG="usbnet",5` 返回 ERROR），MBIM 虽然模式支持但固件里
+没有 `umbim` / `uqmi`，拨不了号。ECM 是唯一走得通的路，而且它不需要用户态拨号工具
+（`at_dial_monitor` + DHCP 即可），反而比 QMI 更稳。
+
+ECM 模式下实测：ping 13–25 ms，`curl` HTTP 200，IPv6 也通，AMBR 下行 1000 Mbps。
+
+### 配套的两个开机修复
+
+切到 ECM 后还有个坑：`modem_scand` 认不到模组，因为 ECM 的数据网卡挂在接口 **1.10**，
+而 qmodem 自带的 `modem_port_rule.json` 只为 `2c7c:0801` 登记了 `1.2/1.3/1.4`。
+日志表现为 `slot=2-1 type=usb has no net device yet` → 5 次重试后放弃 → 不注册、不拨号。
+
+仓库里已经内置两个文件处理这件事：
+
+| 文件 | 作用 |
+| --- | --- |
+| `files/etc/uci-defaults/99-qmodem-rg520n-cn` | 首次启动时把 `1.10` / `1.11` 补进接口表（幂等，改前备份）。**改完需要重启一次**才会被 `modem_scand` 重新读取 |
+| `files/usr/sbin/qmodem-ecm-boot` + `files/etc/init.d/qmodem-ecm-boot` | 开机兜底（START=99）。等 ECM/NCM/RNDIS 网卡出现后，把它和 qmodem 的 section 对上、置 `state=enabled`、下发拨号。只在驱动是 `cdc_ether` / `cdc_ncm` / `rndis_host` 时动作，QMI/MBIM 不干预，且幂等 |
+
+已验证：把 `state` 改成 `disabled`、`network` 改成错误的 `wwan0` 再重启，开机后仍能自动
+纠正并上网（`/tmp/qmodem-ecm-boot.log` 有日志）。
+
 
 ## 许可
 
