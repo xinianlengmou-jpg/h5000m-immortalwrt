@@ -1,0 +1,23 @@
+#!/bin/sh /etc/rc.common
+# 拉起 /usr/sbin/uhttpd-watchdog（见该文件头部注释：兜住 uhttpd 被 procd 放弃的情况）。
+# 用 procd 管理，顺带享受它自己的 respawn —— 看门狗挂了也会被拉起来。
+
+START=97
+STOP=01
+USE_PROCD=1
+
+start_service() {
+	procd_open_instance
+	procd_set_param command /usr/sbin/uhttpd-watchdog
+	procd_set_param respawn
+	procd_close_instance
+}
+
+stop_service() {
+	:
+}
+
+reload_service() {
+	stop
+	start
+}
