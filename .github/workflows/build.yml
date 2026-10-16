@@ -63,6 +63,9 @@ env:
   # 2026-10-16 起恢复跟踪 master：依赖缺失 / 包改名 / libnftnl 版本漂移这类
   # 上游变动，改由每周自检（见 on.schedule）提前发现，而不是靠钉死版本躲过去。
   # 真被上游搞挂时，把 commit sha 填回这一行即可临时止血。
+  # 同日已确认上游自行修复：ad9cadc「libnftnl: refresh patches after version bump」
+  #   + 2248ed7「nftables: refresh patches after version bump」，
+  #   即 1.3.2 + 刷新后的 fullcone 补丁 -> 不再炸。
   SOURCE_PIN: ''
 
 jobs:
@@ -187,6 +190,17 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE/wrt"
           {
+            echo "##### 0. 本次拉到的底层源码 #####"
+            git log -1 --format='  commit  %H%n  日期    %ad%n  标题    %s' --date=iso 2>/dev/null \
+              || echo "  (不是 git 仓库，SOURCE_PIN 走的是 tarball?)"
+            echo "  --- libnftnl（1.3.2 且 fullcone 补丁没跟着刷新 = 必炸）---"
+            if [ -f package/libs/libnftnl/Makefile ]; then
+              grep -E '^PKG_(NAME|VERSION|RELEASE):=' package/libs/libnftnl/Makefile | sed 's/^/  /'
+              ls -1 package/libs/libnftnl/patches/ 2>/dev/null | sed 's/^/  补丁 /'
+            else
+              echo "  ** 找不到 package/libs/libnftnl **"
+            fi
+            echo
             echo "##### 1. filogic.mk 设备定义 #####"
             awk '/define Device\/hiveton_h5000m/,/endef/' target/linux/mediatek/image/filogic.mk
             echo
@@ -201,6 +215,16 @@ jobs:
             for p in kmod-hwmon-pwmfan kmod-usb3 mt7987-2p5g-phy-firmware \
                      kmod-mt7996e kmod-mt7992-23-firmware f2fsck mkf2fs automount; do
               hit=$(find . -maxdepth 6 -type d -name "$p" 2>/dev/null | head -1)
+              # kmod-* 没有独立目录，定义在 package/kernel/linux/modules/*.mk 的
+              # KernelPackage/<名> 里；f2fsck/mkf2fs 是 f2fs-tools Makefile 里的子包。
+              # 只看目录会把它们全误报成「缺失」，所以补一次 Makefile 检索。
+              if [ -z "$hit" ]; then
+                case "$p" in
+                  kmod-*) hit=$(grep -rl --include='*.mk' "KernelPackage/${p#kmod-}$" package target 2>/dev/null | head -1) ;;
+                  *)      hit=$(grep -rl --include='*.mk' -E "(PKG_NAME:=${p}|Package/${p}[[:space:]]*$)" package target 2>/dev/null | head -1) ;;
+                esac
+                [ -n "$hit" ] && hit="$hit (Makefile 里定义)"
+              fi
               echo "  $p -> ${hit:-** 缺失 **}"
             done
             echo
