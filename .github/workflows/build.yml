@@ -264,8 +264,14 @@ jobs:
         if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
         run: |
           mkdir -p out
-          find wrt/bin/targets -maxdepth 2 -type f \( -name '*.bin' -o -name '*.itb' -o -name '*.manifest' \) -exec cp {} out/ \;
+          # 镜像实际落在 bin/targets/<target>/<subtarget>/ 下（相对 wrt/bin/targets 是第 3 层），
+          # maxdepth 2 只能看到 .../mediatek/filogic 这一层目录，一个文件都捞不到
+          # -> 后面 upload-artifact 的 if-no-files-found: error 直接把整次编译判死。
+          find wrt/bin/targets -maxdepth 3 -type f \
+            \( -name '*.bin' -o -name '*.itb' -o -name '*.manifest' \
+               -o -name 'sha256sums' -o -name '*.buildinfo' \) -exec cp {} out/ \;
           ls -lh out
+          [ -n "$(ls -A out)" ] || { echo "!! out/ 为空，打印 bin/targets 实际结构"; find wrt/bin/targets -maxdepth 4 | head -40; exit 1; }
 
       - name: 上传固件
         if: ${{ inputs.test != true && github.ref != 'refs/heads/test' }}
