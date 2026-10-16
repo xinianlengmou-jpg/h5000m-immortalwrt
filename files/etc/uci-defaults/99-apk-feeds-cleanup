@@ -1,0 +1,13 @@
+#!/bin/sh
+# 首次开机：给清理脚本加可执行位并把开机服务设为自启。
+# uci-defaults 脚本成功执行（exit 0）后会被自动删除，只跑一次。
+
+for f in /usr/sbin/apk-feeds-cleanup \
+	/etc/init.d/apk-feeds-cleanup \
+	/etc/hotplug.d/iface/99-apk-feeds-cleanup; do
+	[ -f "$f" ] && chmod 755 "$f"
+done
+
+[ -x /etc/init.d/apk-feeds-cleanup ] && /etc/init.d/apk-feeds-cleanup enable >/dev/null 2>&1
+
+exit 0

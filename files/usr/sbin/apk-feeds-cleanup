@@ -1,0 +1,62 @@
+#!/bin/sh
+# apk-feeds-cleanup —— 停用 distfeeds.list 里官方服务器上并不存在的软件源
+#
+# 背景：编译固件时，凡是本地 src-link 挂载的自建 feed（qmodem / qmodem_generic /
+# luci_theme_mint / fancontrol / video ...），buildroot 都会照抄一条
+#   https://downloads.immortalwrt.org/snapshots/packages/<arch>/<feed>/packages.adb
+# 进 /etc/apk/repositories.d/distfeeds.list，但官方 snapshot 服务器上根本没有这些目录。
+# 结果就是每次 apk update 都刷 5 条 "wget: exited with error 8"，最后以退出码 5 结束，
+# 看起来像失败，其实那 5 条源里的包早就编进固件了，留着没有任何意义。
+#
+# 做法：逐条 --spider 探测，探不到的注释掉。幂等：处理过一次会留下标记，之后直接跳过。
+# 安全网：只有先确认 base 源能连通才动手，避免开机还没拨上号时把所有源全误杀。
+
+F=/etc/apk/repositories.d/distfeeds.list
+MARK='# apk-feeds-cleanup: done'
+
+[ -f "$F" ] || exit 0
+grep -qF "$MARK" "$F" && exit 0
+
+# 找出 base 源（官方一定存在），用它判断网络是否真的通了
+BASE=''
+for u in $(grep -E '^https?://' "$F"); do
+	case "$u" in
+		*/base/packages.adb) BASE="$u" ;;
+	esac
+done
+[ -n "$BASE" ] || exit 0
+wget -q --spider -T 8 "$BASE" >/dev/null 2>&1 </dev/null || exit 0
+
+tmp=/tmp/.apk-feeds-cleanup.$$
+: >"$tmp" || exit 1
+dead=0
+while IFS= read -r line; do
+	case "$line" in
+		http*)
+			# 注意 </dev/null：wget 不能吃掉 while 循环的标准输入
+			if wget -q --spider -T 8 "$line" >/dev/null 2>&1 </dev/null; then
+				printf '%s\n' "$line" >>"$tmp"
+			else
+				printf '# [apk-feeds-cleanup] 官方服务器无此源，已停用: %s\n' "$line" >>"$tmp"
+				dead=$((dead + 1))
+			fi
+			;;
+		*)
+			printf '%s\n' "$line" >>"$tmp"
+			;;
+	esac
+done <"$F"
+
+if [ "$dead" -eq 0 ]; then
+	rm -f "$tmp"
+	exit 0
+fi
+
+{
+	cat "$tmp"
+	printf '%s (%s)\n' "$MARK" "$(date '+%F %T')"
+} >"$F"
+rm -f "$tmp"
+
+logger -t apk-feeds-cleanup "已停用 $dead 个不可达的软件源"
+exit 0

@@ -1,0 +1,6 @@
+#!/bin/sh
+# 网络一通就顺手清一次不可达的软件源（脚本自身幂等，未联网时会直接跳过）
+[ "$ACTION" = "ifup" ] || exit 0
+
+/usr/sbin/apk-feeds-cleanup >/dev/null 2>&1 &
+exit 0

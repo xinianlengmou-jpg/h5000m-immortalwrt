@@ -1,0 +1,28 @@
+#!/bin/sh /etc/rc.common
+# 开机兜底：等默认路由出现后清一次不可达的软件源。
+# hotplug.d/iface 那条通常先触发，这里是防止开机时热插拔事件没覆盖到的情况。
+# 脚本幂等，已处理过就立刻返回，重复执行没有副作用。
+
+START=99
+STOP=01
+
+boot() {
+	(
+		i=0
+		while [ $i -lt 60 ]; do
+			ip route 2>/dev/null | grep -q '^default' && break
+			i=$((i + 1))
+			sleep 3
+		done
+		sleep 5
+		/usr/sbin/apk-feeds-cleanup
+	) >/dev/null 2>&1 &
+}
+
+start() {
+	/usr/sbin/apk-feeds-cleanup >/dev/null 2>&1 &
+}
+
+stop() {
+	:
+}
