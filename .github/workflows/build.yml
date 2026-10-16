@@ -220,10 +220,12 @@ jobs:
               # 只看目录会把它们全误报成「缺失」，所以补一次 Makefile 检索。
               if [ -z "$hit" ]; then
                 case "$p" in
-                  kmod-*) hit=$(grep -rl --include='*.mk' "KernelPackage/${p#kmod-}$" package target 2>/dev/null | head -1) ;;
-                  *)      hit=$(grep -rl --include='*.mk' -E "(PKG_NAME:=${p}|Package/${p}[[:space:]]*$)" package target 2>/dev/null | head -1) ;;
+                  kmod-*) pat="KernelPackage/${p#kmod-}[[:space:]]*$" ;;
+                  *)      pat="(PKG_NAME:=${p}[[:space:]]*$|Package/${p}[[:space:]]*$)" ;;
                 esac
-                [ -n "$hit" ] && hit="$hit (Makefile 里定义)"
+                # 注意：多数包的配方文件叫 Makefile，不是 *.mk，两个都要搜
+                hit=$(grep -rlE --include='*.mk' --include='Makefile' "$pat" package target 2>/dev/null | head -1)
+                [ -n "$hit" ] && hit="$hit (配方文件里定义)"
               fi
               echo "  $p -> ${hit:-** 缺失 **}"
             done
